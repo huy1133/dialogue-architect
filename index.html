@@ -7,13 +7,14 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
 <style>
-    :root { --paper: #f9f6f1; --ink: #18181b; }
-    html, body, button, input, select, textarea { font-family: 'Caveat', cursive !important; }
-    .font-handwriting, .font-serif, .font-mono, .font-sans { font-family: 'Caveat', cursive !important; }
+    :root { --paper: #f9f6f1; --ink: #18181b; --app-font: 'Caveat', cursive; }
+    html.font-normal { --app-font: 'Be Vietnam Pro', sans-serif; }
+    html, body, button, input, select, textarea { font-family: var(--app-font) !important; }
+    .font-handwriting, .font-serif, .font-mono, .font-sans { font-family: var(--app-font) !important; }
     body { background-color: #e5e7eb; color: var(--ink); overflow: hidden; }
     .notebook-bg { background-color: var(--paper); background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 24px 24px; }
     .paper-shadow { box-shadow: 6px 6px 0px 0px rgba(24, 24, 27, 1); }
@@ -33,17 +34,21 @@
     .node-card .handle.unconnected { background:#fff; border:2px dashed #71717a; }
     .node-card .del-btn { opacity:0; transition: opacity .15s; }
     .node-card:hover .del-btn { opacity:1; }
-    .edge-label { font-family:'Caveat', cursive !important; font-weight:700; font-size:13px; background:#fff; border:2px solid #18181b; padding:1px 6px; white-space:nowrap; box-shadow: 2px 2px 0 rgba(0,0,0,1); }
+    .edge-label { font-family: var(--app-font) !important; font-weight:700; font-size:13px; background:#fff; border:2px solid #18181b; padding:1px 6px; white-space:nowrap; box-shadow: 2px 2px 0 rgba(0,0,0,1); }
     .char-card.drag-source, .node-card.drag-source { opacity:.4; }
     .opt-row.drop-hover { outline: 3px solid #2563eb; outline-offset: 2px; }
     .modal-backdrop { background: rgba(24,24,27,.5); }
-    .opt-row input[type=text] { background:transparent; border-bottom:2px solid #18181b; font-family:'Caveat',cursive !important; font-size:18px; outline:none; }
+    .opt-row input[type=text] { background:transparent; border-bottom:2px solid #18181b; font-family: var(--app-font) !important; font-size:18px; outline:none; }
     .lang-btn.active { background:#18181b; color:#fff; }
+    .font-btn.active { background:#18181b; color:#fff; }
     .node-card.node-issue-dead { border-color:#dc2626 !important; border-style:dashed !important; }
     .node-card.node-issue-orphan { opacity:.5; }
     @keyframes flashHighlight { 0%,100% { box-shadow: 6px 6px 0px 0px rgba(37,99,235,1); } 50% { box-shadow: 6px 6px 0px 0px rgba(37,99,235,.15); } }
     .flash-highlight { animation: flashHighlight .4s ease-in-out 3; }
-    .reward-chip { position:absolute; width:150px; background:#fef9c3; border:2px dashed #ca8a04; padding:4px 8px; font-family:'Caveat',cursive !important; font-size:14px; line-height:1.3; box-shadow:2px 2px 0 rgba(0,0,0,.15); z-index:5; }
+    .reward-chip { position:absolute; width:150px; background:#fef9c3; border:2px dashed #ca8a04; padding:4px 8px; font-family: var(--app-font) !important; font-size:14px; line-height:1.3; box-shadow:2px 2px 0 rgba(0,0,0,.15); z-index:5; }
+    .note-chip { position:absolute; width:220px; background:#eff6ff; border:2px dashed #2563eb; padding:6px 8px; font-family: var(--app-font) !important; box-shadow:2px 2px 0 rgba(0,0,0,.15); z-index:5; }
+    .note-chip .note-chip-header { display:flex; align-items:center; justify-content:space-between; font-size:11px; font-weight:700; color:#1d4ed8; margin-bottom:2px; }
+    .note-chip textarea { width:100%; height:96px; background:transparent; border:none; outline:none; resize:vertical; font-size:14px; line-height:1.3; }
     body.review-mode aside, body.review-mode footer,
     body.review-mode #btnAddStart, body.review-mode #btnAddEnding,
     body.review-mode #btnLinkFolder, body.review-mode #btnImport,
@@ -57,19 +62,34 @@
 <div class="flex-1 flex flex-col border-2 border-zinc-900 bg-white shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] rounded-sm overflow-hidden relative">
 
     <!-- HEADER -->
-    <header class="h-20 border-b-2 border-zinc-900 bg-stone-50 flex items-center justify-between px-6 z-40 relative">
-        <div class="flex items-center gap-8">
-            <h1 class="text-4xl font-handwriting font-bold text-zinc-900 rotate-[-1deg] select-none">Dialogue Architect</h1>
+    <header class="min-h-[5rem] border-b-2 border-zinc-900 bg-stone-50 flex flex-wrap items-center justify-between gap-y-2 px-6 py-2 z-40 relative">
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-2 min-w-0">
+            <h1 class="text-4xl font-handwriting font-bold text-zinc-900 rotate-[-1deg] select-none whitespace-nowrap">Dialogue Architect</h1>
             <span id="reviewBadge" data-i18n="reviewBadge" class="hidden px-2 py-1 text-[10px] font-mono font-bold uppercase bg-blue-600 text-white"></span>
             <div class="hidden md:flex gap-2">
-                <button id="btnAddStart" data-i18n="addStart" class="px-3 py-1.5 border-2 border-zinc-900 bg-yellow-200 text-xs font-mono font-bold uppercase hover:-translate-y-0.5 transition-transform"></button>
-                <button id="btnAddEnding" data-i18n="addEnding" class="px-3 py-1.5 border-2 border-zinc-900 bg-rose-200 text-xs font-mono font-bold uppercase hover:-translate-y-0.5 transition-transform"></button>
+                <button id="btnAddStart" data-i18n="addStart" class="px-3 py-1.5 border-2 border-zinc-900 bg-yellow-200 text-xs font-mono font-bold uppercase whitespace-nowrap hover:-translate-y-0.5 transition-transform"></button>
+                <button id="btnAddEnding" data-i18n="addEnding" class="px-3 py-1.5 border-2 border-zinc-900 bg-rose-200 text-xs font-mono font-bold uppercase whitespace-nowrap hover:-translate-y-0.5 transition-transform"></button>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <div class="flex border-2 border-zinc-900 bg-white text-xs font-mono font-bold overflow-hidden">
-                <button id="btnLangEn" data-lang="en" class="lang-btn px-3 py-2">EN</button>
-                <button id="btnLangVi" data-lang="vi" class="lang-btn px-3 py-2 border-l-2 border-zinc-900">VI</button>
+        <div class="flex flex-wrap items-center justify-end gap-4">
+            <div class="relative">
+                <button id="btnSettings" class="p-2 border-2 border-zinc-900 bg-white hover:bg-zinc-100" title="Settings"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                <div id="settingsPanel" class="hidden fixed w-60 bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 z-50 space-y-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label data-i18n="settingsLanguage" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                        <div class="flex border-2 border-zinc-900 bg-white text-xs font-mono font-bold overflow-hidden w-fit">
+                            <button id="btnLangEn" data-lang="en" class="lang-btn px-3 py-2">EN</button>
+                            <button id="btnLangVi" data-lang="vi" class="lang-btn px-3 py-2 border-l-2 border-zinc-900">VI</button>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label data-i18n="settingsFont" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                        <div class="flex border-2 border-zinc-900 bg-white overflow-hidden w-fit">
+                            <button id="btnFontHandwriting" data-font="handwriting" class="font-btn px-3 py-2 flex items-center gap-1.5 text-xs font-mono font-bold" title="Handwriting"><i data-lucide="pen-line" class="w-4 h-4"></i><span data-i18n="fontHandwritingLabel"></span></button>
+                            <button id="btnFontNormal" data-font="normal" class="font-btn px-3 py-2 border-l-2 border-zinc-900 flex items-center gap-1.5 text-xs font-mono font-bold" title="Normal font"><i data-lucide="type" class="w-4 h-4"></i><span data-i18n="fontNormalLabel"></span></button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="undoRedoGroup" class="flex border-2 border-zinc-900 bg-white">
                 <button id="btnUndo" class="p-2 border-r-2 border-zinc-900 hover:bg-zinc-100 disabled:opacity-30"><i data-lucide="undo-2" class="w-5 h-5"></i></button>
@@ -255,10 +275,14 @@ const I18N = {
         duplicateNodeBtn: '⧉ DUPLICATE',
         searchPlaceholder: 'Search nodes...', searchNoResults: 'No matches',
         undoTitle: 'Undo (Ctrl+Z)', redoTitle: 'Redo (Ctrl+Y)',
+        fontHandwritingTitle: 'Handwriting font', fontNormalTitle: 'Normal font (easier to read)',
+        settingsTitle: 'Settings', settingsLanguage: 'Language', settingsFont: 'Font',
+        fontHandwritingLabel: 'Handwriting', fontNormalLabel: 'Normal',
         nodeRewardsLabel: 'Rewards (on reaching this node)', rewardsLabel: 'Rewards', addRewardBtn: '+ Add reward',
         rewardTypeGold: 'Gold', rewardTypeItem: 'Item', rewardTypeCustom: 'Custom',
         rewardNamePlaceholderItem: 'Item name', rewardNamePlaceholderCustom: 'Description',
-        hasRewardsTitle: 'Has rewards', showRewardsTitle: 'Show node rewards', hideRewardsTitle: 'Hide node rewards'
+        hasRewardsTitle: 'Has rewards', showRewardsTitle: 'Show node rewards', hideRewardsTitle: 'Hide node rewards',
+        noteLabel: 'Note', notePlaceholder: 'Type a note for this node...', showNoteTitle: 'Show note', hideNoteTitle: 'Hide note'
     },
     vi: {
         addStart: '+ Bắt đầu', addEnding: '+ Kết thúc',
@@ -290,10 +314,14 @@ const I18N = {
         duplicateNodeBtn: '⧉ NHÂN BẢN',
         searchPlaceholder: 'Tìm node...', searchNoResults: 'Không tìm thấy',
         undoTitle: 'Hoàn tác (Ctrl+Z)', redoTitle: 'Làm lại (Ctrl+Y)',
+        fontHandwritingTitle: 'Font viết tay', fontNormalTitle: 'Font thường (dễ đọc hơn)',
+        settingsTitle: 'Cài đặt', settingsLanguage: 'Ngôn ngữ', settingsFont: 'Font chữ',
+        fontHandwritingLabel: 'Viết tay', fontNormalLabel: 'Bình thường',
         nodeRewardsLabel: 'Phần thưởng (khi tới node này)', rewardsLabel: 'Phần thưởng', addRewardBtn: '+ Thêm thưởng',
         rewardTypeGold: 'Vàng', rewardTypeItem: 'Vật phẩm', rewardTypeCustom: 'Tùy chỉnh',
         rewardNamePlaceholderItem: 'Tên vật phẩm', rewardNamePlaceholderCustom: 'Mô tả',
-        hasRewardsTitle: 'Có phần thưởng', showRewardsTitle: 'Hiện phần thưởng của node', hideRewardsTitle: 'Ẩn phần thưởng của node'
+        hasRewardsTitle: 'Có phần thưởng', showRewardsTitle: 'Hiện phần thưởng của node', hideRewardsTitle: 'Ẩn phần thưởng của node',
+        noteLabel: 'Ghi chú', notePlaceholder: 'Nhập ghi chú cho node này...', showNoteTitle: 'Hiện ghi chú', hideNoteTitle: 'Ẩn ghi chú'
     }
 };
 let currentLang = localStorage.getItem(LANG_KEY) === 'vi' ? 'vi' : 'en';
@@ -307,6 +335,9 @@ function applyStaticI18n() {
     document.getElementById('btnLangVi').classList.toggle('active', currentLang === 'vi');
     document.getElementById('btnUndo').title = t('undoTitle');
     document.getElementById('btnRedo').title = t('redoTitle');
+    document.getElementById('btnFontHandwriting').title = t('fontHandwritingTitle');
+    document.getElementById('btnFontNormal').title = t('fontNormalTitle');
+    document.getElementById('btnSettings').title = t('settingsTitle');
 }
 
 function setLang(lang) {
@@ -320,6 +351,55 @@ function setLang(lang) {
 }
 document.getElementById('btnLangEn').onclick = () => setLang('en');
 document.getElementById('btnLangVi').onclick = () => setLang('vi');
+
+// ---------- font switcher (default: handwriting; alternative: a normal, highly-legible font for VI + EN) ----------
+const FONT_KEY = 'dialogue-architect-font-v1';
+let currentFont = localStorage.getItem(FONT_KEY) === 'normal' ? 'normal' : 'handwriting';
+function applyFont() {
+    document.documentElement.classList.toggle('font-normal', currentFont === 'normal');
+    document.getElementById('btnFontHandwriting').classList.toggle('active', currentFont === 'handwriting');
+    document.getElementById('btnFontNormal').classList.toggle('active', currentFont === 'normal');
+}
+function setFont(font) {
+    currentFont = font;
+    localStorage.setItem(FONT_KEY, font);
+    applyFont();
+}
+document.getElementById('btnFontHandwriting').onclick = () => setFont('handwriting');
+document.getElementById('btnFontNormal').onclick = () => setFont('normal');
+applyFont();
+
+// ---------- settings dropdown (holds the language + font rows) ----------
+// Uses position:fixed with a JS-computed, viewport-clamped position (instead of CSS right-0
+// relative to the button) because the header can wrap the button to different spots at
+// narrow widths - a purely CSS anchor would push the panel off-screen in that case.
+const btnSettings = document.getElementById('btnSettings');
+const settingsPanel = document.getElementById('settingsPanel');
+const MARGIN = 8;
+function positionSettingsPanel() {
+    const btnRect = btnSettings.getBoundingClientRect();
+    const panelW = settingsPanel.offsetWidth;
+    let left = btnRect.right - panelW; // prefer right-aligned under the button
+    left = Math.min(left, window.innerWidth - panelW - MARGIN);
+    left = Math.max(left, MARGIN);
+    settingsPanel.style.left = left + 'px';
+    settingsPanel.style.top = (btnRect.bottom + MARGIN) + 'px';
+}
+function openSettingsPanel() {
+    settingsPanel.classList.remove('hidden');
+    positionSettingsPanel();
+}
+function closeSettingsPanel() { settingsPanel.classList.add('hidden'); }
+btnSettings.onclick = (e) => {
+    e.stopPropagation();
+    if (settingsPanel.classList.contains('hidden')) openSettingsPanel(); else closeSettingsPanel();
+};
+document.addEventListener('click', (e) => {
+    if (!settingsPanel.classList.contains('hidden') && !settingsPanel.contains(e.target) && e.target !== btnSettings) {
+        closeSettingsPanel();
+    }
+});
+window.addEventListener('resize', () => { if (!settingsPanel.classList.contains('hidden')) positionSettingsPanel(); });
 
 const REVIEW_MODE = new URLSearchParams(window.location.search).get('mode') === 'review';
 document.body.classList.toggle('review-mode', REVIEW_MODE);
@@ -358,6 +438,11 @@ let connecting = null; // { sourceNodeId, optionId, x1, y1 }
 const expandedRewardNodes = new Set(); // UI-only: which nodes currently show their node-level reward chip
 function toggleNodeRewards(id) {
     if (expandedRewardNodes.has(id)) expandedRewardNodes.delete(id); else expandedRewardNodes.add(id);
+    renderCanvas();
+}
+const expandedNoteNodes = new Set(); // UI-only: which nodes currently show their note chip
+function toggleNodeNote(id) {
+    if (expandedNoteNodes.has(id)) expandedNoteNodes.delete(id); else expandedNoteNodes.add(id);
     renderCanvas();
 }
 
@@ -575,9 +660,9 @@ function renderAvatarGallery(seeds) {
 
 // ---------- node factories ----------
 function makeNode(type, characterId) {
-    if (type === 'start') return { id: uid('node'), type, characterId: null, text: t('nodeStartText'), rewards: [], options: [{ id: uid('opt'), label: '', targetNodeId: null, rewards: [] }] };
-    if (type === 'ending') return { id: uid('node'), type, characterId: null, text: t('nodeEndingText'), rewards: [], options: [] };
-    return { id: uid('node'), type: 'dialogue', characterId, text: t('nodeDialogueText'), rewards: [], options: [
+    if (type === 'start') return { id: uid('node'), type, characterId: null, text: t('nodeStartText'), note: '', rewards: [], options: [{ id: uid('opt'), label: '', targetNodeId: null, rewards: [] }] };
+    if (type === 'ending') return { id: uid('node'), type, characterId: null, text: t('nodeEndingText'), note: '', rewards: [], options: [] };
+    return { id: uid('node'), type: 'dialogue', characterId, text: t('nodeDialogueText'), note: '', rewards: [], options: [
         { id: uid('opt'), label: t('defaultYes'), targetNodeId: null, rewards: [] },
         { id: uid('opt'), label: t('defaultNo'), targetNodeId: null, rewards: [] }
     ]};
@@ -587,6 +672,7 @@ function makeNode(type, characterId) {
 function ensureRewardsShape() {
     state.nodes.forEach(n => {
         if (!n.rewards) n.rewards = [];
+        if (typeof n.note !== 'string') n.note = '';
         n.options.forEach(o => { if (!o.rewards) o.rewards = []; });
     });
 }
@@ -710,6 +796,7 @@ function renderCanvas() {
     state.nodes.forEach(n => layer.appendChild(renderNodeCard(n, issues)));
     renderEdges();
     renderRewardAnnotations();
+    renderNoteAnnotations();
     applyViewportTransform();
     lucide.createIcons();
 }
@@ -796,6 +883,45 @@ function renderRewardAnnotations() {
     });
 }
 
+// ---------- note annotation (single free-text note per node, edited directly on the canvas) ----------
+// Sits on the RIGHT of the node (rewards use the left side) so the two features never collide.
+// The textarea updates state.note on every keystroke but deliberately does NOT call renderCanvas()
+// while typing - renderCanvas() wipes and rebuilds #nodesLayer, which would destroy this very
+// textarea and steal focus/cursor position mid-keystroke. A full re-render only happens on the
+// next unrelated canvas change (or when the chip itself is toggled open/closed).
+const NOTE_CHIP_W = 220, NOTE_CHIP_H = 122;
+function renderNoteAnnotations() {
+    const svg = document.getElementById('edgesSvg');
+    const layer = document.getElementById('nodesLayer');
+    const SIDE_GAP = 24;
+    state.nodes.forEach(n => {
+        if (!expandedNoteNodes.has(n.id)) return;
+        const chipX = n.x + NODE_W / 2 + SIDE_GAP;
+        const chipY = n.y - NOTE_CHIP_H / 2;
+        appendDashedConnector(svg, n.x + NODE_W / 2, n.y, chipX, n.y);
+
+        const chip = document.createElement('div');
+        chip.className = 'note-chip';
+        chip.style.left = chipX + 'px';
+        chip.style.top = chipY + 'px';
+        chip.addEventListener('mousedown', (e) => e.stopPropagation());
+        chip.addEventListener('click', (e) => e.stopPropagation());
+        chip.innerHTML = `
+            <div class="note-chip-header">
+                <span>📝 ${escapeHtml(t('noteLabel'))}</span>
+                <button data-action="close-note" class="text-blue-700 hover:text-blue-900"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+            </div>
+            <textarea placeholder="${escapeAttr(t('notePlaceholder'))}" spellcheck="false"></textarea>
+        `;
+        const textarea = chip.querySelector('textarea');
+        textarea.value = n.note || '';
+        textarea.readOnly = REVIEW_MODE;
+        textarea.oninput = () => { snapshotDebounced(); n.note = textarea.value; save(); };
+        chip.querySelector('[data-action="close-note"]').addEventListener('click', (e) => { e.stopPropagation(); toggleNodeNote(n.id); });
+        layer.appendChild(chip);
+    });
+}
+
 function renderNodeCard(n, issues) {
     const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
     const char = n.characterId ? charById(n.characterId) : null;
@@ -806,6 +932,8 @@ function renderNodeCard(n, issues) {
     const isOrphan = issues && issues.orphan.has(n.id);
     const hasAnyRewardHere = (n.rewards && n.rewards.length > 0) || n.options.some(o => o.rewards && o.rewards.length > 0);
     const rewardsExpanded = expandedRewardNodes.has(n.id);
+    const hasNote = !!(n.note && n.note.trim());
+    const noteExpanded = expandedNoteNodes.has(n.id);
 
     const div = document.createElement('div');
     div.className = `node-card ${bgClass} border-2 border-zinc-900 paper-shadow p-5 ${n.id === selectedNodeId ? 'selected' : ''} ${isDeadEnd ? 'node-issue-dead' : ''} ${isOrphan ? 'node-issue-orphan' : ''}`;
@@ -827,6 +955,7 @@ function renderNodeCard(n, issues) {
         ${isDeadEnd ? `<div class="absolute -top-3 -left-3 w-7 h-7 rounded-full bg-red-600 border-2 border-zinc-900 flex items-center justify-center text-white text-sm font-bold z-10" title="${escapeAttr(t('issueDeadEnd'))}">!</div>` : ''}
         ${isOrphan ? `<div class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-zinc-500 border-2 border-zinc-900 flex items-center justify-center text-white text-sm font-bold z-10" title="${escapeAttr(t('issueOrphan'))}">?</div>` : ''}
         ${hasAnyRewardHere ? `<button data-action="toggle-rewards" class="absolute -bottom-3 -left-3 w-7 h-7 rounded-full border-2 border-zinc-900 flex items-center justify-center text-sm z-10 cursor-pointer ${rewardsExpanded ? 'bg-yellow-400' : 'bg-yellow-100'}" title="${escapeAttr(rewardsExpanded ? t('hideRewardsTitle') : t('showRewardsTitle'))}">🎁</button>` : ''}
+        <button data-action="toggle-note" class="absolute -bottom-3 -right-3 w-7 h-7 rounded-full border-2 border-zinc-900 flex items-center justify-center text-sm z-10 cursor-pointer ${noteExpanded ? 'bg-sky-400' : (hasNote ? 'bg-sky-100' : 'bg-white')}" title="${escapeAttr(noteExpanded ? t('hideNoteTitle') : t('showNoteTitle'))}">📝</button>
         <div class="flex items-center justify-between mb-3">
             <span class="text-[10px] font-mono font-bold ${badgeClass} text-white px-2 py-0.5">${escapeHtml(typeLabel)}</span>
             ${REVIEW_MODE ? '' : '<button class="del-btn w-5 h-5 flex items-center justify-center hover:bg-rose-600 hover:text-white" data-action="del-node"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>'}
@@ -855,6 +984,7 @@ function renderNodeCard(n, issues) {
     if (hasAnyRewardHere) {
         div.querySelector('[data-action="toggle-rewards"]').addEventListener('click', (e) => { e.stopPropagation(); toggleNodeRewards(n.id); });
     }
+    div.querySelector('[data-action="toggle-note"]').addEventListener('click', (e) => { e.stopPropagation(); toggleNodeNote(n.id); });
 
     div.addEventListener('mousedown', (e) => { e.stopPropagation(); });
     div.addEventListener('click', (e) => { e.stopPropagation(); selectNode(n.id); });
