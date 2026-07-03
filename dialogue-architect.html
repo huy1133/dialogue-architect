@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dialogue Architect</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<style>
+    :root { --paper: #f9f6f1; --ink: #18181b; }
+    html, body, button, input, select, textarea { font-family: 'Caveat', cursive !important; }
+    .font-handwriting, .font-serif, .font-mono, .font-sans { font-family: 'Caveat', cursive !important; }
+    body { background-color: #e5e7eb; color: var(--ink); overflow: hidden; }
+    .notebook-bg { background-color: var(--paper); background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 24px 24px; }
+    .paper-shadow { box-shadow: 6px 6px 0px 0px rgba(24, 24, 27, 1); }
+    .tape { background: rgba(253, 224, 71, 0.4); backdrop-filter: blur(1px); transform: rotate(-2deg); }
+    .spiral-bind { background-image: radial-gradient(circle, #3f3f46 40%, transparent 45%); background-size: 30px 30px; background-repeat: repeat-x; }
+    .grain { position: fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:50; opacity:.05;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E"); }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
+
+    #viewport { position:absolute; top:0; left:0; transform-origin: 0 0; }
+    .node-card { position:absolute; width:240px; cursor:pointer; user-select:none; transition: left .35s ease, top .35s ease; }
+    .node-card.selected { outline: 3px solid #2563eb; outline-offset: 3px; }
+    .node-card .handle { width:16px; height:16px; border-radius:50%; background:#18181b; border:2px solid white; position:absolute; cursor: crosshair; z-index: 10; }
+    .node-card .handle:hover { background:#2563eb; transform: scale(1.2); }
+    .node-card .handle.unconnected { background:#fff; border:2px dashed #71717a; }
+    .node-card .del-btn { opacity:0; transition: opacity .15s; }
+    .node-card:hover .del-btn { opacity:1; }
+    .edge-label { font-family:'Caveat', cursive !important; font-weight:700; font-size:13px; background:#fff; border:2px solid #18181b; padding:1px 6px; white-space:nowrap; box-shadow: 2px 2px 0 rgba(0,0,0,1); }
+    .char-card.drag-source, .node-card.drag-source { opacity:.4; }
+    .opt-row.drop-hover { outline: 3px solid #2563eb; outline-offset: 2px; }
+    .modal-backdrop { background: rgba(24,24,27,.5); }
+    .opt-row input[type=text] { background:transparent; border-bottom:2px solid #18181b; font-family:'Caveat',cursive !important; font-size:18px; outline:none; }
+    .lang-btn.active { background:#18181b; color:#fff; }
+    .node-card.node-issue-dead { border-color:#dc2626 !important; border-style:dashed !important; }
+    .node-card.node-issue-orphan { opacity:.5; }
+    @keyframes flashHighlight { 0%,100% { box-shadow: 6px 6px 0px 0px rgba(37,99,235,1); } 50% { box-shadow: 6px 6px 0px 0px rgba(37,99,235,.15); } }
+    .flash-highlight { animation: flashHighlight .4s ease-in-out 3; }
+    .reward-chip { position:absolute; width:150px; background:#fef9c3; border:2px dashed #ca8a04; padding:4px 8px; font-family:'Caveat',cursive !important; font-size:14px; line-height:1.3; box-shadow:2px 2px 0 rgba(0,0,0,.15); z-index:5; }
+    body.review-mode aside, body.review-mode footer,
+    body.review-mode #btnAddStart, body.review-mode #btnAddEnding,
+    body.review-mode #btnLinkFolder, body.review-mode #btnImport,
+    body.review-mode #btnReview, body.review-mode #undoRedoGroup { display:none !important; }
+    body.review-mode .node-card { cursor:default; }
+</style>
+</head>
+<body class="h-screen w-screen p-4 flex flex-col overflow-hidden">
+<div class="grain"></div>
+
+<div class="flex-1 flex flex-col border-2 border-zinc-900 bg-white shadow-[12px_12px_0px_0px_rgba(0,0,0,0.1)] rounded-sm overflow-hidden relative">
+
+    <!-- HEADER -->
+    <header class="h-20 border-b-2 border-zinc-900 bg-stone-50 flex items-center justify-between px-6 z-40 relative">
+        <div class="flex items-center gap-8">
+            <h1 class="text-4xl font-handwriting font-bold text-zinc-900 rotate-[-1deg] select-none">Dialogue Architect</h1>
+            <span id="reviewBadge" data-i18n="reviewBadge" class="hidden px-2 py-1 text-[10px] font-mono font-bold uppercase bg-blue-600 text-white"></span>
+            <div class="hidden md:flex gap-2">
+                <button id="btnAddStart" data-i18n="addStart" class="px-3 py-1.5 border-2 border-zinc-900 bg-yellow-200 text-xs font-mono font-bold uppercase hover:-translate-y-0.5 transition-transform"></button>
+                <button id="btnAddEnding" data-i18n="addEnding" class="px-3 py-1.5 border-2 border-zinc-900 bg-rose-200 text-xs font-mono font-bold uppercase hover:-translate-y-0.5 transition-transform"></button>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex border-2 border-zinc-900 bg-white text-xs font-mono font-bold overflow-hidden">
+                <button id="btnLangEn" data-lang="en" class="lang-btn px-3 py-2">EN</button>
+                <button id="btnLangVi" data-lang="vi" class="lang-btn px-3 py-2 border-l-2 border-zinc-900">VI</button>
+            </div>
+            <div id="undoRedoGroup" class="flex border-2 border-zinc-900 bg-white">
+                <button id="btnUndo" class="p-2 border-r-2 border-zinc-900 hover:bg-zinc-100 disabled:opacity-30"><i data-lucide="undo-2" class="w-5 h-5"></i></button>
+                <button id="btnRedo" class="p-2 hover:bg-zinc-100 disabled:opacity-30"><i data-lucide="redo-2" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex border-2 border-zinc-900 bg-white">
+                <button id="btnZoomIn" class="p-2 border-r-2 border-zinc-900 hover:bg-zinc-100"><i data-lucide="zoom-in" class="w-5 h-5"></i></button>
+                <button id="btnZoomOut" class="p-2 border-r-2 border-zinc-900 hover:bg-zinc-100"><i data-lucide="zoom-out" class="w-5 h-5"></i></button>
+                <button id="btnZoomReset" class="p-2 hover:bg-zinc-100"><i data-lucide="maximize" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex gap-2">
+                <button id="btnReview" class="px-3 py-2 bg-white border-2 border-zinc-900 text-xs font-mono font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center gap-1">
+                    <i data-lucide="scan" class="w-4 h-4"></i> <span id="reviewLabel" data-i18n="reviewBtn"></span>
+                </button>
+                <button id="btnLinkFolder" class="px-3 py-2 bg-white border-2 border-zinc-900 text-xs font-mono font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center gap-1">
+                    <i data-lucide="folder" class="w-4 h-4"></i> <span id="folderLabel"></span>
+                </button>
+                <input type="file" id="fileImport" accept="application/json" class="hidden" />
+                <button id="btnImport" data-i18n="importBtn" class="px-4 py-2 bg-white border-2 border-zinc-900 text-sm font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all"></button>
+                <button id="btnExport" class="relative px-6 py-2 bg-white border-2 border-zinc-900 text-sm font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all">
+                    <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-4 tape"></div>
+                    <span id="exportLabel" data-i18n="exportBtn"></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+        <!-- SIDEBAR -->
+        <aside class="w-72 border-r-2 border-zinc-900 bg-stone-100 relative flex flex-col z-30">
+            <div class="p-6 flex-1 overflow-y-auto">
+                <div class="flex items-center justify-between mb-6 border-b border-zinc-300 pb-2">
+                    <h2 id="charactersHeading" data-i18n="charactersHeading" class="text-2xl font-handwriting"></h2>
+                    <button id="btnAddCharacter" class="w-7 h-7 flex items-center justify-center border-2 border-zinc-900 bg-white hover:bg-zinc-900 hover:text-white transition-colors"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                </div>
+                <div id="characterList" class="space-y-6"></div>
+            </div>
+            <div data-i18n="sidebarTip" class="mt-auto p-4 border-t-2 border-zinc-900 bg-yellow-50/50 italic text-sm text-zinc-500 font-serif"></div>
+        </aside>
+
+        <!-- CANVAS -->
+        <main id="canvasWrapper" class="flex-1 notebook-bg relative overflow-hidden">
+            <div id="viewport">
+                <svg id="edgesSvg" style="position:absolute; top:0; left:0; overflow:visible; filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.1));"></svg>
+                <div id="nodesLayer"></div>
+            </div>
+
+            <div class="absolute top-4 left-4 z-20">
+                <div class="flex items-center bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] px-2 py-1.5 gap-2">
+                    <i data-lucide="search" class="w-4 h-4 text-zinc-500"></i>
+                    <input id="nodeSearchInput" type="text" data-i18n-placeholder="searchPlaceholder" class="text-sm w-44 outline-none bg-transparent" />
+                </div>
+                <div id="searchResults" class="hidden mt-1 bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] max-h-56 overflow-y-auto w-64"></div>
+            </div>
+
+            <div id="minimap" class="absolute bottom-6 left-6 w-44 h-28 bg-white/90 border-2 border-zinc-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden cursor-pointer z-20">
+                <svg id="minimapSvg" class="w-full h-full"></svg>
+            </div>
+
+            <div class="absolute bottom-6 right-6 flex gap-3 pointer-events-none">
+                <div class="bg-white border-2 border-zinc-900 p-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-mono text-xs flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                    <span id="autosaveLabel" data-i18n="autosavedDefault"></span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- FOOTER EDITOR -->
+    <footer class="h-64 border-t-2 border-zinc-900 bg-stone-50 z-40 relative flex">
+        <div class="absolute -top-[15px] left-0 right-0 h-8 spiral-bind opacity-80 pointer-events-none"></div>
+        <div id="editorEmpty" data-i18n="editorEmpty" class="w-full flex items-center justify-center font-handwriting text-2xl text-zinc-400"></div>
+        <div id="editorForm" class="hidden w-full flex">
+            <div class="w-2/3 p-8 border-r-2 border-zinc-900 overflow-y-auto">
+                <div class="grid grid-cols-2 gap-8">
+                    <div class="space-y-6">
+                        <div class="flex flex-col gap-1">
+                            <label data-i18n="nodeTypeLabel" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                            <span id="editNodeTypeBadge" class="inline-block px-2 py-0.5 text-[10px] font-mono font-bold text-white w-fit"></span>
+                        </div>
+                        <div id="editCharacterWrap" class="flex flex-col gap-1">
+                            <label data-i18n="associatedCharacter" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                            <select id="editCharacterSelect" class="bg-transparent border-b-2 border-zinc-900 focus:outline-none font-handwriting text-2xl w-full"></select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="btnDeleteNode" data-i18n="deleteNodeBtn" class="text-xs font-mono font-bold text-rose-700 border-2 border-rose-700 px-3 py-1.5 w-fit hover:bg-rose-700 hover:text-white transition-colors"></button>
+                            <button id="btnDuplicateNode" data-i18n="duplicateNodeBtn" class="text-xs font-mono font-bold text-zinc-700 border-2 border-zinc-700 px-3 py-1.5 w-fit hover:bg-zinc-700 hover:text-white transition-colors"></button>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="flex flex-col gap-1">
+                            <label id="editTextLabel" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                            <textarea id="editText" class="bg-transparent border-none focus:outline-none font-handwriting text-xl leading-[32px] w-full resize-none h-32" spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex flex-col gap-1">
+                    <label data-i18n="nodeRewardsLabel" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                    <div id="nodeRewardsList" class="space-y-1"></div>
+                    <button id="btnAddNodeReward" data-i18n="addRewardBtn" class="w-full py-1.5 border-2 border-dashed border-zinc-400 text-zinc-400 font-mono text-[10px] hover:border-zinc-900 hover:text-zinc-900 transition-colors"></button>
+                </div>
+            </div>
+            <div class="w-1/3 p-8 bg-zinc-50 flex flex-col gap-4 overflow-y-auto">
+                <h3 class="text-xs font-mono font-black uppercase text-zinc-400 tracking-widest flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4"></i> <span data-i18n="branchingRules"></span>
+                </h3>
+                <div id="optionsList" class="space-y-3"></div>
+                <button id="btnAddOption" data-i18n="addBranchBtn" class="w-full py-2 border-2 border-dashed border-zinc-400 text-zinc-400 font-mono text-xs hover:border-zinc-900 hover:text-zinc-900 transition-colors"></button>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<!-- CHARACTER MODAL -->
+<div id="characterModal" class="hidden fixed inset-0 modal-backdrop z-50 flex items-center justify-center">
+    <div class="bg-white border-2 border-zinc-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-[680px] max-h-[88vh] overflow-y-auto p-6 relative">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-14 h-6 tape"></div>
+        <h3 data-i18n="characterSheet" class="text-2xl font-handwriting mb-4"></h3>
+        <div class="space-y-4">
+            <div class="flex flex-col gap-1">
+                <label data-i18n="nameLabel" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                <input id="charName" type="text" class="border-b-2 border-zinc-900 focus:outline-none font-handwriting text-2xl py-1" />
+            </div>
+            <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between">
+                    <label data-i18n="chooseAvatar" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                    <button id="btnAvatarRandom" type="button" data-i18n="randomBtn" class="text-[10px] font-mono font-bold border-2 border-zinc-900 px-2 py-0.5 hover:bg-zinc-100"></button>
+                </div>
+                <div id="avatarGallery" class="grid grid-cols-8 gap-2 p-2 border-2 border-zinc-300 bg-stone-50 max-h-72 overflow-y-auto"></div>
+                <div class="flex items-center gap-2 mt-1">
+                    <img id="seedPreviewImg" class="w-10 h-10 border-2 border-zinc-900 bg-white flex-shrink-0" />
+                    <input id="charSeed" type="text" data-i18n-placeholder="seedPlaceholder" class="border-b-2 border-zinc-900 focus:outline-none font-mono text-sm py-1 flex-1" />
+                </div>
+            </div>
+            <div class="flex flex-col gap-1">
+                <label data-i18n="personalityLabel" class="text-[10px] font-mono font-bold uppercase text-zinc-400"></label>
+                <textarea id="charPersonality" class="border-2 border-zinc-300 focus:outline-none focus:border-zinc-900 font-serif text-base p-2 h-20 resize-none"></textarea>
+            </div>
+        </div>
+        <div class="flex justify-between items-center mt-6">
+            <button id="btnDeleteCharacter" data-i18n="deleteBtn" class="hidden text-xs font-mono font-bold text-rose-700 border-2 border-rose-700 px-3 py-1.5 hover:bg-rose-700 hover:text-white transition-colors"></button>
+            <div class="flex gap-2 ml-auto">
+                <button id="btnCancelCharacter" data-i18n="cancelBtn" class="px-4 py-2 border-2 border-zinc-900 font-mono text-xs font-bold hover:bg-zinc-100"></button>
+                <button id="btnSaveCharacter" data-i18n="saveBtn" class="px-4 py-2 bg-zinc-900 text-white border-2 border-zinc-900 font-mono text-xs font-bold hover:bg-zinc-800"></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+lucide.createIcons();
+
+// ---------- i18n ----------
+const LANG_KEY = 'dialogue-architect-lang-v1';
+const I18N = {
+    en: {
+        addStart: '+ Start', addEnding: '+ Ending',
+        linkFolder: 'LINK FOLDER', importBtn: 'IMPORT', exportBtn: 'EXPORT JSON',
+        charactersHeading: 'Dramatis Personae',
+        sidebarTip: 'Drag a character onto the canvas to create a new dialogue node.',
+        autosavedDefault: 'AUTOSAVED', savedPrefix: 'SAVED ',
+        editorEmpty: 'Select a node on the canvas to edit...',
+        nodeTypeLabel: 'Node Type', associatedCharacter: 'Associated Character',
+        deleteNodeBtn: 'DELETE NODE',
+        dialogueScriptLabel: 'Dialogue Script / Question', endingContentLabel: 'Ending Content',
+        branchingRules: 'Branching Rules', addBranchBtn: '+ ADD NEW BRANCH',
+        characterSheet: 'Character Sheet', nameLabel: 'Name',
+        chooseAvatar: 'Choose Avatar', randomBtn: '🎲 RANDOM 50',
+        seedPlaceholder: 'Type your own seed... (e.g. Felix123)',
+        personalityLabel: 'Personality', deleteBtn: 'DELETE', cancelBtn: 'CANCEL', saveBtn: 'SAVE',
+        startOptionLabel: 'Start', notLinked: 'not linked', noneOption: '— none —',
+        folderUnsupported: 'This browser does not support picking a save folder directly (Chrome/Edge only). Use the EXPORT JSON button and save manually instead.',
+        grantPermissionSuffix: ' (click to re-grant permission)',
+        invalidJson: 'Invalid JSON file: ', needCharacterName: 'Please enter a character name',
+        confirmDeleteCharacter: 'Delete this character? Nodes linked to it will lose the link.',
+        defaultYes: 'Yes', defaultNo: 'No', defaultChoice: 'Choice',
+        nodeStartText: 'Start the story...', nodeEndingText: 'Ending: ...', nodeDialogueText: 'Enter a question...',
+        typeStart: 'START', typeDialogue: 'DIALOGUE', typeEnding: 'ENDING',
+        connectHint: 'connect',
+        reviewBtn: '🔍 REVIEW', reviewBadge: 'REVIEW MODE (read-only)',
+        dropNodeHint: 'Drag a node here from the canvas to link it',
+        issueDeadEnd: 'Has an unlinked branch', issueOrphan: 'Unreachable from Start',
+        duplicateNodeBtn: '⧉ DUPLICATE',
+        searchPlaceholder: 'Search nodes...', searchNoResults: 'No matches',
+        undoTitle: 'Undo (Ctrl+Z)', redoTitle: 'Redo (Ctrl+Y)',
+        nodeRewardsLabel: 'Rewards (on reaching this node)', rewardsLabel: 'Rewards', addRewardBtn: '+ Add reward',
+        rewardTypeGold: 'Gold', rewardTypeItem: 'Item', rewardTypeCustom: 'Custom',
+        rewardNamePlaceholderItem: 'Item name', rewardNamePlaceholderCustom: 'Description',
+        hasRewardsTitle: 'Has rewards', showRewardsTitle: 'Show node rewards', hideRewardsTitle: 'Hide node rewards'
+    },
+    vi: {
+        addStart: '+ Bắt đầu', addEnding: '+ Kết thúc',
+        linkFolder: 'CHỌN THƯ MỤC', importBtn: 'NHẬP FILE', exportBtn: 'XUẤT JSON',
+        charactersHeading: 'Danh Sách Nhân Vật',
+        sidebarTip: 'Kéo 1 nhân vật vào canvas để tạo node hội thoại mới.',
+        autosavedDefault: 'ĐÃ LƯU TỰ ĐỘNG', savedPrefix: 'ĐÃ LƯU ',
+        editorEmpty: 'Chọn 1 node trên canvas để chỉnh sửa...',
+        nodeTypeLabel: 'Loại Node', associatedCharacter: 'Nhân Vật Liên Kết',
+        deleteNodeBtn: 'XOÁ NODE',
+        dialogueScriptLabel: 'Lời Thoại / Câu Hỏi', endingContentLabel: 'Nội Dung Kết Thúc',
+        branchingRules: 'Quy Tắc Rẽ Nhánh', addBranchBtn: '+ THÊM NHÁNH MỚI',
+        characterSheet: 'Hồ Sơ Nhân Vật', nameLabel: 'Tên',
+        chooseAvatar: 'Chọn Avatar', randomBtn: '🎲 NGẪU NHIÊN 50',
+        seedPlaceholder: 'Nhập seed riêng của bạn... (vd: Felix123)',
+        personalityLabel: 'Tính Cách', deleteBtn: 'XOÁ', cancelBtn: 'HUỶ', saveBtn: 'LƯU',
+        startOptionLabel: 'Bắt đầu', notLinked: 'chưa nối', noneOption: '— không có —',
+        folderUnsupported: 'Trình duyệt này không hỗ trợ chọn thư mục lưu trực tiếp (chỉ Chrome/Edge). Hãy dùng nút XUẤT JSON rồi lưu thủ công vào thư mục.',
+        grantPermissionSuffix: ' (bấm để cấp quyền lại)',
+        invalidJson: 'File JSON không hợp lệ: ', needCharacterName: 'Vui lòng nhập tên nhân vật',
+        confirmDeleteCharacter: 'Xoá nhân vật này? Các node đang gắn nhân vật này sẽ mất liên kết.',
+        defaultYes: 'Có', defaultNo: 'Không', defaultChoice: 'Lựa chọn',
+        nodeStartText: 'Bắt đầu câu chuyện...', nodeEndingText: 'Kết thúc: ...', nodeDialogueText: 'Nhập câu hỏi...',
+        typeStart: 'BẮT ĐẦU', typeDialogue: 'HỘI THOẠI', typeEnding: 'KẾT THÚC',
+        connectHint: 'nối',
+        reviewBtn: '🔍 XEM TOÀN CẢNH', reviewBadge: 'CHẾ ĐỘ XEM (chỉ đọc)',
+        dropNodeHint: 'Kéo 1 node từ canvas vào đây để liên kết',
+        issueDeadEnd: 'Có nhánh chưa nối', issueOrphan: 'Không tới được từ Start',
+        duplicateNodeBtn: '⧉ NHÂN BẢN',
+        searchPlaceholder: 'Tìm node...', searchNoResults: 'Không tìm thấy',
+        undoTitle: 'Hoàn tác (Ctrl+Z)', redoTitle: 'Làm lại (Ctrl+Y)',
+        nodeRewardsLabel: 'Phần thưởng (khi tới node này)', rewardsLabel: 'Phần thưởng', addRewardBtn: '+ Thêm thưởng',
+        rewardTypeGold: 'Vàng', rewardTypeItem: 'Vật phẩm', rewardTypeCustom: 'Tùy chỉnh',
+        rewardNamePlaceholderItem: 'Tên vật phẩm', rewardNamePlaceholderCustom: 'Mô tả',
+        hasRewardsTitle: 'Có phần thưởng', showRewardsTitle: 'Hiện phần thưởng của node', hideRewardsTitle: 'Ẩn phần thưởng của node'
+    }
+};
+let currentLang = localStorage.getItem(LANG_KEY) === 'vi' ? 'vi' : 'en';
+function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) ?? I18N.en[key] ?? key; }
+
+function applyStaticI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+    document.getElementById('editTextLabel').textContent = t('dialogueScriptLabel');
+    document.getElementById('btnLangEn').classList.toggle('active', currentLang === 'en');
+    document.getElementById('btnLangVi').classList.toggle('active', currentLang === 'vi');
+    document.getElementById('btnUndo').title = t('undoTitle');
+    document.getElementById('btnRedo').title = t('redoTitle');
+}
+
+function setLang(lang) {
+    currentLang = lang;
+    localStorage.setItem(LANG_KEY, lang);
+    applyStaticI18n();
+    renderFolderLabel();
+    renderCanvas();
+    renderEditor();
+    save();
+}
+document.getElementById('btnLangEn').onclick = () => setLang('en');
+document.getElementById('btnLangVi').onclick = () => setLang('vi');
+
+const REVIEW_MODE = new URLSearchParams(window.location.search).get('mode') === 'review';
+document.body.classList.toggle('review-mode', REVIEW_MODE);
+document.getElementById('reviewBadge').classList.toggle('hidden', !REVIEW_MODE);
+
+document.getElementById('btnReview').onclick = () => {
+    const base = window.location.href.split('?')[0].split('#')[0];
+    window.open(base + '?mode=review', '_blank');
+};
+
+const STORAGE_KEY = 'dialogue-architect-state-v1';
+const NODE_W = 240, NODE_H_DIALOGUE = 190, NODE_H_SIMPLE = 120;
+const COLORS = { start:'bg-yellow-200', dialogue:'bg-sky-200', ending:'bg-rose-200' };
+const BADGE = { start:'bg-zinc-900', dialogue:'bg-sky-900', ending:'bg-rose-900' };
+const TYPE_KEY = { start:'typeStart', dialogue:'typeDialogue', ending:'typeEnding' };
+
+// ---------- per-character color coding ----------
+const CHAR_PALETTE = [
+    { bg: 'bg-sky-200', badge: 'bg-sky-900', accent: 'bg-sky-500' },
+    { bg: 'bg-emerald-200', badge: 'bg-emerald-900', accent: 'bg-emerald-500' },
+    { bg: 'bg-violet-200', badge: 'bg-violet-900', accent: 'bg-violet-500' },
+    { bg: 'bg-amber-200', badge: 'bg-amber-900', accent: 'bg-amber-500' },
+    { bg: 'bg-fuchsia-200', badge: 'bg-fuchsia-900', accent: 'bg-fuchsia-500' },
+    { bg: 'bg-teal-200', badge: 'bg-teal-900', accent: 'bg-teal-500' },
+    { bg: 'bg-orange-200', badge: 'bg-orange-900', accent: 'bg-orange-500' },
+    { bg: 'bg-indigo-200', badge: 'bg-indigo-900', accent: 'bg-indigo-500' }
+];
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+function charColor(characterId) { return CHAR_PALETTE[hashStr(characterId) % CHAR_PALETTE.length]; }
+
+let state = { characters: [], nodes: [] };
+let selectedNodeId = null;
+let editingCharacterId = null;
+let zoom = 1, panX = 60, panY = 40;
+let connecting = null; // { sourceNodeId, optionId, x1, y1 }
+const expandedRewardNodes = new Set(); // UI-only: which nodes currently show their node-level reward chip
+function toggleNodeRewards(id) {
+    if (expandedRewardNodes.has(id)) expandedRewardNodes.delete(id); else expandedRewardNodes.add(id);
+    renderCanvas();
+}
+
+const uid = (p) => p + '-' + Math.random().toString(36).slice(2, 9);
+
+// ---------- undo / redo history ----------
+const HISTORY_LIMIT = 50;
+let undoStack = [], redoStack = [];
+let typingSnapshot = null, typingTimer = null;
+
+function pushUndoSnapshot(snapshotJson) {
+    undoStack.push(snapshotJson);
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack = [];
+    updateUndoRedoButtons();
+}
+// call BEFORE a discrete one-shot mutation (button click, drag-connect, delete, etc.)
+function snapshotNow() {
+    pushUndoSnapshot(JSON.stringify(state));
+}
+// call BEFORE a continuous mutation (typing in a textarea/input) - commits after a pause
+function snapshotDebounced() {
+    if (typingSnapshot === null) typingSnapshot = JSON.stringify(state);
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+        if (typingSnapshot !== null) { pushUndoSnapshot(typingSnapshot); typingSnapshot = null; }
+    }, 700);
+}
+function updateUndoRedoButtons() {
+    const u = document.getElementById('btnUndo'), r = document.getElementById('btnRedo');
+    if (u) u.disabled = undoStack.length === 0;
+    if (r) r.disabled = redoStack.length === 0;
+}
+function finishHistoryChange() {
+    ensureRewardsShape();
+    relayout();
+    renderCharacterList();
+    renderCanvas();
+    renderEditor();
+    save();
+    updateUndoRedoButtons();
+}
+function undo() {
+    if (!undoStack.length) return;
+    clearTimeout(typingTimer); typingSnapshot = null;
+    const prev = undoStack.pop();
+    redoStack.push(JSON.stringify(state));
+    state = JSON.parse(prev);
+    selectedNodeId = null;
+    finishHistoryChange();
+}
+function redo() {
+    if (!redoStack.length) return;
+    clearTimeout(typingTimer); typingSnapshot = null;
+    const next = redoStack.pop();
+    undoStack.push(JSON.stringify(state));
+    state = JSON.parse(next);
+    selectedNodeId = null;
+    finishHistoryChange();
+}
+document.getElementById('btnUndo').onclick = undo;
+document.getElementById('btnRedo').onclick = redo;
+document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+});
+
+// ---------- persistence: localStorage (always) ----------
+function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const lbl = document.getElementById('autosaveLabel');
+    lbl.textContent = t('savedPrefix') + new Date().toLocaleTimeString();
+    writeToFolder();
+}
+
+// ---------- persistence: real file in a folder (File System Access API) ----------
+const FS_DB_NAME = 'dialogue-architect-fs';
+const FS_DB_STORE = 'handles';
+const FS_FILE_NAME = 'dialogue-tree-autosave.json';
+let dirHandle = null;
+let folderInfo = { name: null, status: 'idle' }; // idle | needs-permission | written
+
+function fsIdbOpen() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(FS_DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(FS_DB_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+async function fsIdbSet(key, value) {
+    const db = await fsIdbOpen();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(FS_DB_STORE, 'readwrite');
+        tx.objectStore(FS_DB_STORE).put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+async function fsIdbGet(key) {
+    const db = await fsIdbOpen();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(FS_DB_STORE, 'readonly');
+        const req = tx.objectStore(FS_DB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+function renderFolderLabel() {
+    const el = document.getElementById('folderLabel');
+    if (folderInfo.status === 'needs-permission') el.textContent = folderInfo.name + '/' + t('grantPermissionSuffix');
+    else if (folderInfo.status === 'written') el.textContent = folderInfo.name + '/' + FS_FILE_NAME;
+    else el.textContent = t('linkFolder');
+}
+
+async function pickSaveFolder() {
+    if (!window.showDirectoryPicker) {
+        alert(t('folderUnsupported'));
+        return;
+    }
+    try {
+        dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await fsIdbSet('dir', dirHandle);
+        folderInfo = { name: dirHandle.name, status: 'granted' };
+        await writeToFolder();
+    } catch (e) { /* user cancelled the picker */ }
+}
+
+async function tryReconnectFolder() {
+    if (!window.showDirectoryPicker) return;
+    try {
+        const handle = await fsIdbGet('dir');
+        if (!handle) return;
+        dirHandle = handle;
+        const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+        folderInfo = { name: dirHandle.name, status: perm === 'granted' ? 'granted' : 'needs-permission' };
+        renderFolderLabel();
+        if (perm === 'granted') await writeToFolder();
+    } catch (e) { /* ignore */ }
+}
+
+async function writeToFolder() {
+    if (!dirHandle) return;
+    let perm;
+    try { perm = await dirHandle.queryPermission({ mode: 'readwrite' }); }
+    catch (e) { return; }
+    if (perm !== 'granted') { folderInfo = { name: dirHandle.name, status: 'needs-permission' }; renderFolderLabel(); return; }
+    try {
+        const fileHandle = await dirHandle.getFileHandle(FS_FILE_NAME, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(buildPayload(), null, 2));
+        await writable.close();
+        folderInfo = { name: dirHandle.name, status: 'written' };
+        renderFolderLabel();
+    } catch (e) { console.error('write to folder failed', e); }
+}
+
+document.getElementById('btnLinkFolder').onclick = async () => {
+    if (dirHandle) {
+        const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') { await writeToFolder(); return; }
+    }
+    await pickSaveFolder();
+};
+function load() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { try { state = JSON.parse(raw); } catch(e) {} }
+}
+
+// ---------- character helpers ----------
+function charById(id) { return state.characters.find(c => c.id === id); }
+// only ever use this exact Dicebear endpoint (v10, avataaars style) - seed decides the face
+const DICEBEAR_BASE = 'https://api.dicebear.com/10.x/avataaars/svg';
+function dicebearUrl(seed) { return `${DICEBEAR_BASE}?seed=${encodeURIComponent(seed)}`; }
+function randomSeed() { return Math.random().toString(36).slice(2, 10); }
+function avatarFor(c) {
+    if (c.seed) return dicebearUrl(c.seed);
+    if (c.avatar) return c.avatar; // legacy imported/older data with a raw URL already saved
+    return dicebearUrl(c.name || 'Hero');
+}
+
+const AVATAR_GALLERY_SIZE = 50;
+function generateRandomSeeds(n) { return Array.from({ length: n }, () => randomSeed()); }
+
+function updateSeedPreview() {
+    const seed = document.getElementById('charSeed').value.trim() || document.getElementById('charName').value.trim() || 'Hero';
+    document.getElementById('seedPreviewImg').src = dicebearUrl(seed);
+}
+
+function renderAvatarGallery(seeds) {
+    const gallery = document.getElementById('avatarGallery');
+    const currentSeed = document.getElementById('charSeed').value.trim();
+    gallery.innerHTML = '';
+    seeds.forEach(seed => {
+        const url = dicebearUrl(seed);
+        const thumb = document.createElement('button');
+        thumb.type = 'button';
+        thumb.className = 'aspect-square border-2 bg-white overflow-hidden ' + (seed === currentSeed ? 'border-blue-600 ring-2 ring-blue-400' : 'border-zinc-900 hover:border-blue-500');
+        thumb.title = seed;
+        thumb.innerHTML = `<img src="${url}" alt="${seed}" loading="lazy" class="w-full h-full object-cover" />`;
+        thumb.onclick = () => {
+            document.getElementById('charSeed').value = seed;
+            updateSeedPreview();
+            gallery.querySelectorAll('button').forEach(b => b.classList.remove('border-blue-600', 'ring-2', 'ring-blue-400'));
+            thumb.classList.remove('border-zinc-900', 'hover:border-blue-500');
+            thumb.classList.add('border-blue-600', 'ring-2', 'ring-blue-400');
+        };
+        gallery.appendChild(thumb);
+    });
+}
+
+// ---------- node factories ----------
+function makeNode(type, characterId) {
+    if (type === 'start') return { id: uid('node'), type, characterId: null, text: t('nodeStartText'), rewards: [], options: [{ id: uid('opt'), label: '', targetNodeId: null, rewards: [] }] };
+    if (type === 'ending') return { id: uid('node'), type, characterId: null, text: t('nodeEndingText'), rewards: [], options: [] };
+    return { id: uid('node'), type: 'dialogue', characterId, text: t('nodeDialogueText'), rewards: [], options: [
+        { id: uid('opt'), label: t('defaultYes'), targetNodeId: null, rewards: [] },
+        { id: uid('opt'), label: t('defaultNo'), targetNodeId: null, rewards: [] }
+    ]};
+}
+
+// ---------- rewards (structured notes: gold / item / custom) ----------
+function ensureRewardsShape() {
+    state.nodes.forEach(n => {
+        if (!n.rewards) n.rewards = [];
+        n.options.forEach(o => { if (!o.rewards) o.rewards = []; });
+    });
+}
+function renderRewardRow(reward, onFieldChange, onDelete) {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-1 border border-zinc-300 bg-white p-1';
+    row.innerHTML = `
+        <select data-role="type" class="text-[10px] font-mono bg-transparent border-r border-zinc-300 pr-1 flex-shrink-0">
+            <option value="gold">${escapeHtml(t('rewardTypeGold'))}</option>
+            <option value="item">${escapeHtml(t('rewardTypeItem'))}</option>
+            <option value="custom">${escapeHtml(t('rewardTypeCustom'))}</option>
+        </select>
+        <input data-role="name" type="text" class="flex-1 min-w-0 text-xs font-handwriting px-1 outline-none" />
+        <input data-role="amount" type="number" class="w-12 text-xs font-mono px-1 outline-none flex-shrink-0" />
+        <button data-role="del" class="text-zinc-400 hover:text-rose-600 flex-shrink-0"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+    `;
+    const typeSel = row.querySelector('[data-role="type"]');
+    const nameInput = row.querySelector('[data-role="name"]');
+    const amountInput = row.querySelector('[data-role="amount"]');
+    typeSel.value = reward.type;
+    nameInput.value = reward.name;
+    amountInput.value = reward.amount;
+    function syncVisibility() {
+        nameInput.classList.toggle('hidden', typeSel.value === 'gold');
+        nameInput.placeholder = typeSel.value === 'item' ? t('rewardNamePlaceholderItem') : t('rewardNamePlaceholderCustom');
+    }
+    syncVisibility();
+    typeSel.onchange = () => { snapshotNow(); reward.type = typeSel.value; syncVisibility(); onFieldChange(); };
+    nameInput.oninput = () => { snapshotDebounced(); reward.name = nameInput.value; onFieldChange(); };
+    amountInput.oninput = () => { snapshotDebounced(); reward.amount = Number(amountInput.value) || 0; onFieldChange(); };
+    row.querySelector('[data-role="del"]').onclick = () => { snapshotNow(); onDelete(); };
+    return row;
+}
+function renderRewardsInto(containerId, addBtnId, rewardsArray) {
+    const container = document.getElementById(containerId);
+    const addBtn = document.getElementById(addBtnId);
+    container.innerHTML = '';
+    rewardsArray.forEach((r, idx) => {
+        const row = renderRewardRow(r,
+            () => { save(); renderCanvas(); },
+            () => { rewardsArray.splice(idx, 1); save(); renderCanvas(); renderEditor(); }
+        );
+        container.appendChild(row);
+    });
+    lucide.createIcons();
+    addBtn.onclick = () => {
+        snapshotNow();
+        rewardsArray.push({ id: uid('rw'), type: 'gold', name: '', amount: 1 });
+        save(); renderCanvas(); renderEditor();
+    };
+}
+
+// ---------- layout (dagre, top-to-bottom, like mermaid) ----------
+function relayout() {
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: 'TB', nodesep: 70, ranksep: 100 });
+    g.setDefaultEdgeLabel(() => ({}));
+    state.nodes.forEach(n => {
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        g.setNode(n.id, { width: NODE_W, height: h });
+    });
+    state.nodes.forEach(n => n.options.forEach(o => { if (o.targetNodeId) g.setEdge(n.id, o.targetNodeId); }));
+    dagre.layout(g);
+    state.nodes.forEach(n => {
+        const p = g.node(n.id);
+        n.x = p.x; n.y = p.y;
+    });
+}
+
+// ---------- render: sidebar ----------
+function renderCharacterList() {
+    const list = document.getElementById('characterList');
+    list.innerHTML = '';
+    state.characters.forEach((c, i) => {
+        const rot = i % 3 === 0 ? 'rotate-2' : (i % 3 === 1 ? '-rotate-2' : 'rotate-1');
+        const div = document.createElement('div');
+        div.className = `char-card relative bg-white p-2 border-2 border-zinc-900 shadow-sm ${rot} hover:rotate-0 transition-transform cursor-grab`;
+        div.draggable = true;
+        div.dataset.characterId = c.id;
+        div.innerHTML = `
+            <div class="absolute -top-3 left-1/4 w-12 h-6 tape mix-blend-multiply opacity-80"></div>
+            <div class="absolute top-1 right-1 w-3 h-3 rounded-full border border-zinc-900 ${charColor(c.id).accent}"></div>
+            <div class="aspect-square bg-zinc-200 border-2 border-zinc-900 overflow-hidden mb-2">
+                <img src="${avatarFor(c)}" alt="${c.name}" class="grayscale contrast-125 w-full h-full object-cover" />
+            </div>
+            <p class="font-handwriting text-center text-lg leading-tight">${escapeHtml(c.name)}</p>`;
+        div.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/character-id', c.id); div.classList.add('drag-source'); });
+        div.addEventListener('dragend', () => div.classList.remove('drag-source'));
+        div.addEventListener('click', () => openCharacterModal(c.id));
+        list.appendChild(div);
+    });
+}
+
+// ---------- graph issue detection (dead-end branches, unreachable nodes) ----------
+function computeGraphIssues() {
+    const deadEnd = new Set();
+    state.nodes.forEach(n => {
+        if (n.type === 'ending') return;
+        if (n.options.length === 0 || n.options.some(o => !o.targetNodeId)) deadEnd.add(n.id);
+    });
+    const starts = state.nodes.filter(n => n.type === 'start').map(n => n.id);
+    const reachable = new Set();
+    const queue = [...starts];
+    while (queue.length) {
+        const id = queue.shift();
+        if (reachable.has(id)) continue;
+        reachable.add(id);
+        const node = state.nodes.find(n => n.id === id);
+        if (!node) continue;
+        node.options.forEach(o => { if (o.targetNodeId) queue.push(o.targetNodeId); });
+    }
+    const orphan = new Set(state.nodes.filter(n => n.type !== 'start' && !reachable.has(n.id)).map(n => n.id));
+    return { deadEnd, orphan };
+}
+
+// ---------- render: canvas nodes + edges ----------
+function renderCanvas() {
+    const layer = document.getElementById('nodesLayer');
+    layer.innerHTML = '';
+    const issues = computeGraphIssues();
+    state.nodes.forEach(n => layer.appendChild(renderNodeCard(n, issues)));
+    renderEdges();
+    renderRewardAnnotations();
+    applyViewportTransform();
+    lucide.createIcons();
+}
+
+// ---------- reward annotations shown directly on canvas (dashed-line chips) ----------
+function formatReward(r) {
+    if (r.type === 'gold') return `+${r.amount} ${t('rewardTypeGold')}`;
+    if (r.type === 'item') return `${r.name || t('rewardTypeItem')} ×${r.amount}`;
+    return r.name ? (r.amount ? `${r.name} ×${r.amount}` : r.name) : t('rewardTypeCustom');
+}
+function appendDashedConnector(svg, x1, y1, x2, y2) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    line.setAttribute('stroke', '#ca8a04');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('stroke-dasharray', '5,4');
+    svg.appendChild(line);
+}
+function appendElbowConnector(svg, x1, y1, x2, y2) {
+    // drops straight down from the exact branch point first (so the source stays unambiguous),
+    // then jogs sideways into the chip - this is what lets chips fork left/right below the node.
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    poly.setAttribute('points', `${x1},${y1} ${x1},${y2} ${x2},${y2}`);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', '#ca8a04');
+    poly.setAttribute('stroke-width', '2');
+    poly.setAttribute('stroke-dasharray', '5,4');
+    svg.appendChild(poly);
+}
+function chipHeightFor(rewards) { return 16 + rewards.length * 20; }
+function appendRewardChip(layer, x, y, rewards) {
+    const chip = document.createElement('div');
+    chip.className = 'reward-chip';
+    chip.style.left = x + 'px';
+    chip.style.top = y + 'px';
+    chip.innerHTML = rewards.map(r => `<div class="flex items-center gap-1">🎁 <span>${escapeHtml(formatReward(r))}</span></div>`).join('');
+    layer.appendChild(chip);
+}
+// Toggling a node's gift badge shows/hides ALL its rewards at once (node-level + every branch's).
+// Node-level reward sits to the left (not tied to any single branch). Branch rewards drop straight
+// down from their own connection point (unambiguous source), then fork left/right below the node,
+// alternating per branch and stacking deeper on each side so boxes never overlap.
+function renderRewardAnnotations() {
+    const svg = document.getElementById('edgesSvg');
+    const layer = document.getElementById('nodesLayer');
+    const CHIP_W = 150, SIDE_GAP = 24, BELOW_GAP = 6, GAP_V = 14;
+    state.nodes.forEach(n => {
+        if (!expandedRewardNodes.has(n.id)) return;
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        const optionsWithRewards = n.options
+            .map((o, idx) => ({ o, idx }))
+            .filter(x => x.o.rewards && x.o.rewards.length);
+        const hasNodeReward = n.rewards && n.rewards.length > 0;
+        if (!hasNodeReward && !optionsWithRewards.length) return;
+
+        if (hasNodeReward) {
+            const ch = chipHeightFor(n.rewards);
+            const chipX = n.x - NODE_W / 2 - SIDE_GAP - CHIP_W;
+            const chipY = n.y - ch / 2;
+            appendDashedConnector(svg, n.x - NODE_W / 2, n.y, chipX + CHIP_W, n.y);
+            appendRewardChip(layer, chipX, chipY, n.rewards);
+        }
+
+        const count = n.options.length;
+        let leftDepth = n.y + h / 2 + BELOW_GAP;
+        let rightDepth = n.y + h / 2 + BELOW_GAP;
+        optionsWithRewards.forEach(({ o, idx }, i) => {
+            const spacing = NODE_W / (count + 1);
+            const hx = n.x - NODE_W / 2 + spacing * (idx + 1);
+            const hy = n.y + h / 2;
+            const ch = chipHeightFor(o.rewards);
+            // side follows the handle's actual position (left half -> left, right half -> right) so
+            // connector lines never have to cross past the node to reach their chip
+            const side = hx < n.x ? 'left' : (hx > n.x ? 'right' : (i % 2 === 0 ? 'right' : 'left'));
+            let chipX, chipY;
+            if (side === 'right') { chipX = n.x + NODE_W / 2 + SIDE_GAP; chipY = rightDepth; rightDepth += ch + GAP_V; }
+            else { chipX = n.x - NODE_W / 2 - SIDE_GAP - CHIP_W; chipY = leftDepth; leftDepth += ch + GAP_V; }
+            const chipCenterY = chipY + ch / 2;
+            const chipEdgeX = side === 'right' ? chipX : chipX + CHIP_W;
+            appendElbowConnector(svg, hx, hy, chipEdgeX, chipCenterY);
+            appendRewardChip(layer, chipX, chipY, o.rewards);
+        });
+    });
+}
+
+function renderNodeCard(n, issues) {
+    const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+    const char = n.characterId ? charById(n.characterId) : null;
+    const cc = (n.type === 'dialogue' && char) ? charColor(char.id) : null;
+    const bgClass = cc ? cc.bg : COLORS[n.type];
+    const badgeClass = cc ? cc.badge : BADGE[n.type];
+    const isDeadEnd = issues && issues.deadEnd.has(n.id);
+    const isOrphan = issues && issues.orphan.has(n.id);
+    const hasAnyRewardHere = (n.rewards && n.rewards.length > 0) || n.options.some(o => o.rewards && o.rewards.length > 0);
+    const rewardsExpanded = expandedRewardNodes.has(n.id);
+
+    const div = document.createElement('div');
+    div.className = `node-card ${bgClass} border-2 border-zinc-900 paper-shadow p-5 ${n.id === selectedNodeId ? 'selected' : ''} ${isDeadEnd ? 'node-issue-dead' : ''} ${isOrphan ? 'node-issue-orphan' : ''}`;
+    div.style.left = (n.x - NODE_W / 2) + 'px';
+    div.style.top = (n.y - h / 2) + 'px';
+    div.style.minHeight = h + 'px';
+    div.dataset.nodeId = n.id;
+    div.draggable = !REVIEW_MODE;
+    div.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/node-id', n.id);
+        e.dataTransfer.effectAllowed = 'link';
+        div.classList.add('drag-source');
+    });
+    div.addEventListener('dragend', () => div.classList.remove('drag-source'));
+
+    const typeLabel = n.type === 'start' ? t('typeStart') : (n.type === 'ending' ? t('typeEnding') : (char ? char.name.toUpperCase() : t('typeDialogue')));
+
+    div.innerHTML = `
+        ${isDeadEnd ? `<div class="absolute -top-3 -left-3 w-7 h-7 rounded-full bg-red-600 border-2 border-zinc-900 flex items-center justify-center text-white text-sm font-bold z-10" title="${escapeAttr(t('issueDeadEnd'))}">!</div>` : ''}
+        ${isOrphan ? `<div class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-zinc-500 border-2 border-zinc-900 flex items-center justify-center text-white text-sm font-bold z-10" title="${escapeAttr(t('issueOrphan'))}">?</div>` : ''}
+        ${hasAnyRewardHere ? `<button data-action="toggle-rewards" class="absolute -bottom-3 -left-3 w-7 h-7 rounded-full border-2 border-zinc-900 flex items-center justify-center text-sm z-10 cursor-pointer ${rewardsExpanded ? 'bg-yellow-400' : 'bg-yellow-100'}" title="${escapeAttr(rewardsExpanded ? t('hideRewardsTitle') : t('showRewardsTitle'))}">🎁</button>` : ''}
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-[10px] font-mono font-bold ${badgeClass} text-white px-2 py-0.5">${escapeHtml(typeLabel)}</span>
+            ${REVIEW_MODE ? '' : '<button class="del-btn w-5 h-5 flex items-center justify-center hover:bg-rose-600 hover:text-white" data-action="del-node"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>'}
+        </div>
+        ${char ? `<div class="flex items-center gap-2 mb-2"><img src="${avatarFor(char)}" class="w-6 h-6 rounded-full border border-zinc-900 grayscale"/><span class="font-handwriting text-sm">${escapeHtml(char.name)}</span></div>` : ''}
+        <p class="font-handwriting text-lg leading-snug break-words">${escapeHtml(n.text)}</p>
+    `;
+
+    if (!REVIEW_MODE) {
+        // handles
+        const count = Math.max(n.options.length, 0);
+        n.options.forEach((o, idx) => {
+            const handle = document.createElement('div');
+            handle.className = 'handle' + (o.targetNodeId ? '' : ' unconnected');
+            const spacing = NODE_W / (count + 1);
+            handle.style.left = (spacing * (idx + 1) - 8) + 'px';
+            handle.style.bottom = '-8px';
+            handle.dataset.nodeId = n.id;
+            handle.dataset.optionId = o.id;
+            handle.title = o.label || t('connectHint');
+            handle.addEventListener('mousedown', onHandleMouseDown);
+            div.appendChild(handle);
+        });
+        div.querySelector('[data-action="del-node"]').addEventListener('click', (e) => { e.stopPropagation(); deleteNode(n.id); });
+    }
+    if (hasAnyRewardHere) {
+        div.querySelector('[data-action="toggle-rewards"]').addEventListener('click', (e) => { e.stopPropagation(); toggleNodeRewards(n.id); });
+    }
+
+    div.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    div.addEventListener('click', (e) => { e.stopPropagation(); selectNode(n.id); });
+
+    return div;
+}
+
+function renderEdges() {
+    const svg = document.getElementById('edgesSvg');
+    svg.innerHTML = '';
+    let maxX = 0, maxY = 0;
+    state.nodes.forEach(n => {
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        maxX = Math.max(maxX, n.x + NODE_W); maxY = Math.max(maxY, n.y + h);
+        const count = n.options.length;
+        n.options.forEach((o, idx) => {
+            if (!o.targetNodeId) return;
+            const target = state.nodes.find(t => t.id === o.targetNodeId);
+            if (!target) return;
+            const spacing = NODE_W / (count + 1);
+            const sx = n.x - NODE_W / 2 + spacing * (idx + 1);
+            const sy = n.y + (n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE) / 2;
+            const th = target.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+            const tx = target.x, ty = target.y - th / 2;
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${sx} ${sy} C ${sx} ${sy+50}, ${tx} ${ty-50}, ${tx} ${ty}`);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#27272a');
+            path.setAttribute('stroke-width', '3');
+            svg.appendChild(path);
+            if (o.label) {
+                const mx = (sx + tx) / 2, my = (sy + ty) / 2;
+                const fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                fo.setAttribute('x', mx - 30); fo.setAttribute('y', my - 12);
+                fo.setAttribute('width', 60); fo.setAttribute('height', 24);
+                fo.innerHTML = `<div class="edge-label text-center">${escapeHtml(o.label)}</div>`;
+                svg.appendChild(fo);
+            }
+        });
+    });
+    svg.style.width = (maxX + 200) + 'px';
+    svg.style.height = (maxY + 200) + 'px';
+}
+
+function applyViewportTransform() {
+    document.getElementById('viewport').style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+    renderMinimap();
+}
+
+// ---------- minimap ----------
+let minimapMeta = null;
+function renderMinimap() {
+    const svg = document.getElementById('minimapSvg');
+    if (!svg) return;
+    svg.innerHTML = '';
+    if (!state.nodes.length) { minimapMeta = null; return; }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    state.nodes.forEach(n => {
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        minX = Math.min(minX, n.x - NODE_W / 2); maxX = Math.max(maxX, n.x + NODE_W / 2);
+        minY = Math.min(minY, n.y - h / 2); maxY = Math.max(maxY, n.y + h);
+    });
+    const PAD = 60;
+    minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+    const worldW = maxX - minX, worldH = maxY - minY;
+    const mm = document.getElementById('minimap');
+    const mmW = mm.clientWidth, mmH = mm.clientHeight;
+    const scale = Math.min(mmW / worldW, mmH / worldH);
+    const toMx = (x) => (x - minX) * scale;
+    const toMy = (y) => (y - minY) * scale;
+    state.nodes.forEach(n => {
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        const char = n.characterId ? charById(n.characterId) : null;
+        const fill = n.type === 'start' ? '#facc15' : n.type === 'ending' ? '#fb7185' : '#38bdf8';
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', toMx(n.x - NODE_W / 2));
+        rect.setAttribute('y', toMy(n.y - h / 2));
+        rect.setAttribute('width', Math.max(2, NODE_W * scale));
+        rect.setAttribute('height', Math.max(2, h * scale));
+        rect.setAttribute('fill', fill);
+        rect.setAttribute('rx', '1');
+        svg.appendChild(rect);
+    });
+    const availW = canvasWrapper.clientWidth, availH = canvasWrapper.clientHeight;
+    const viewWorldX = -panX / zoom, viewWorldY = -panY / zoom;
+    const viewWorldW = availW / zoom, viewWorldH = availH / zoom;
+    const vRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    vRect.setAttribute('x', toMx(viewWorldX));
+    vRect.setAttribute('y', toMy(viewWorldY));
+    vRect.setAttribute('width', viewWorldW * scale);
+    vRect.setAttribute('height', viewWorldH * scale);
+    vRect.setAttribute('fill', 'rgba(37,99,235,0.15)');
+    vRect.setAttribute('stroke', '#2563eb');
+    vRect.setAttribute('stroke-width', '1.5');
+    svg.appendChild(vRect);
+    minimapMeta = { minX, minY, scale };
+}
+document.getElementById('minimap').addEventListener('click', (e) => {
+    if (!minimapMeta) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const worldX = minimapMeta.minX + mx / minimapMeta.scale;
+    const worldY = minimapMeta.minY + my / minimapMeta.scale;
+    panX = canvasWrapper.clientWidth / 2 - worldX * zoom;
+    panY = canvasWrapper.clientHeight / 2 - worldY * zoom;
+    applyViewportTransform();
+});
+
+// ---------- search nodes ----------
+function focusNode(id) {
+    const n = state.nodes.find(x => x.id === id);
+    if (!n) return;
+    selectedNodeId = id;
+    panX = canvasWrapper.clientWidth / 2 - n.x * zoom;
+    panY = canvasWrapper.clientHeight / 2 - n.y * zoom;
+    applyViewportTransform();
+    renderCanvas();
+    renderEditor();
+    const el = document.querySelector(`.node-card[data-node-id="${id}"]`);
+    if (el) { el.classList.add('flash-highlight'); setTimeout(() => el.classList.remove('flash-highlight'), 1200); }
+}
+const nodeSearchInput = document.getElementById('nodeSearchInput');
+const searchResultsEl = document.getElementById('searchResults');
+nodeSearchInput.addEventListener('input', () => {
+    const q = nodeSearchInput.value.trim().toLowerCase();
+    if (!q) { searchResultsEl.classList.add('hidden'); searchResultsEl.innerHTML = ''; return; }
+    const matches = state.nodes.filter(n => {
+        const char = n.characterId ? charById(n.characterId) : null;
+        return n.text.toLowerCase().includes(q) || (char && char.name.toLowerCase().includes(q));
+    }).slice(0, 8);
+    searchResultsEl.classList.remove('hidden');
+    if (!matches.length) {
+        searchResultsEl.innerHTML = `<div class="p-2 text-xs font-mono text-zinc-400">${escapeHtml(t('searchNoResults'))}</div>`;
+        return;
+    }
+    searchResultsEl.innerHTML = matches.map(n => `<div data-id="${n.id}" class="p-2 text-sm font-handwriting border-b border-zinc-200 hover:bg-zinc-100 cursor-pointer truncate">${escapeHtml(nodeSummary(n))}</div>`).join('');
+    searchResultsEl.querySelectorAll('[data-id]').forEach(row => {
+        row.onclick = () => { focusNode(row.dataset.id); searchResultsEl.classList.add('hidden'); nodeSearchInput.value = ''; };
+    });
+});
+nodeSearchInput.addEventListener('blur', () => setTimeout(() => searchResultsEl.classList.add('hidden'), 150));
+
+// ---------- fit-to-screen (used by review mode) ----------
+function fitToScreen() {
+    if (!state.nodes.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    state.nodes.forEach(n => {
+        const h = n.type === 'dialogue' ? NODE_H_DIALOGUE : NODE_H_SIMPLE;
+        minX = Math.min(minX, n.x - NODE_W / 2);
+        maxX = Math.max(maxX, n.x + NODE_W / 2);
+        minY = Math.min(minY, n.y - h / 2);
+        maxY = Math.max(maxY, n.y + h);
+    });
+    const PAD = 80;
+    const contentW = (maxX - minX) + PAD * 2;
+    const contentH = (maxY - minY) + PAD * 2;
+    const availW = canvasWrapper.clientWidth;
+    const availH = canvasWrapper.clientHeight;
+    zoom = Math.max(0.15, Math.min(availW / contentW, availH / contentH, 1.5));
+    panX = (availW - contentW * zoom) / 2 - (minX - PAD) * zoom;
+    panY = (availH - contentH * zoom) / 2 - (minY - PAD) * zoom;
+    applyViewportTransform();
+}
+
+// ---------- selection & editor ----------
+function selectNode(id) {
+    selectedNodeId = id;
+    renderCanvas();
+    renderEditor();
+}
+
+function renderEditor() {
+    const empty = document.getElementById('editorEmpty');
+    const form = document.getElementById('editorForm');
+    const node = state.nodes.find(n => n.id === selectedNodeId);
+    if (!node) { empty.classList.remove('hidden'); form.classList.add('hidden'); return; }
+    empty.classList.add('hidden'); form.classList.remove('hidden');
+    if (!node.rewards) node.rewards = [];
+    node.options.forEach(o => { if (!o.rewards) o.rewards = []; });
+
+    const editChar = node.characterId ? charById(node.characterId) : null;
+    const editBadgeClass = (node.type === 'dialogue' && editChar) ? charColor(editChar.id).badge : BADGE[node.type];
+    document.getElementById('editNodeTypeBadge').textContent = t(TYPE_KEY[node.type]);
+    document.getElementById('editNodeTypeBadge').className = `inline-block px-2 py-0.5 text-[10px] font-mono font-bold text-white w-fit ${editBadgeClass}`;
+    document.getElementById('editTextLabel').textContent = node.type === 'ending' ? t('endingContentLabel') : t('dialogueScriptLabel');
+
+    const charWrap = document.getElementById('editCharacterWrap');
+    const sel = document.getElementById('editCharacterSelect');
+    if (node.type === 'dialogue') {
+        charWrap.classList.remove('hidden');
+        sel.innerHTML = `<option value="">${t('noneOption')}</option>` + state.characters.map(c => `<option value="${c.id}" ${c.id === node.characterId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+        sel.onchange = () => { snapshotNow(); node.characterId = sel.value || null; save(); renderCanvas(); };
+    } else {
+        charWrap.classList.add('hidden');
+    }
+
+    const textEl = document.getElementById('editText');
+    textEl.value = node.text;
+    textEl.oninput = () => { snapshotDebounced(); node.text = textEl.value; save(); renderCanvas(); };
+
+    renderRewardsInto('nodeRewardsList', 'btnAddNodeReward', node.rewards);
+
+    const optionsList = document.getElementById('optionsList');
+    optionsList.innerHTML = '';
+    const addBtn = document.getElementById('btnAddOption');
+    addBtn.classList.toggle('hidden', node.type !== 'dialogue' || node.options.length >= 3);
+
+    node.options.forEach((o, idx) => {
+        const target = o.targetNodeId ? state.nodes.find(t => t.id === o.targetNodeId) : null;
+        const optWrap = document.createElement('div');
+        const row = document.createElement('div');
+        row.className = 'opt-row flex items-center justify-between p-2 border-2 border-zinc-900 bg-white gap-2';
+        row.innerHTML = `
+            ${node.type === 'start' ? `<span class="font-handwriting text-lg">${escapeHtml(t('startOptionLabel'))}</span>` : `<input type="text" value="${escapeAttr(o.label)}" class="w-16 flex-shrink-0" data-role="label" />`}
+            <span class="text-xs font-mono text-zinc-500 flex-1 truncate">→ ${target ? escapeHtml(nodeSummary(target)) : escapeHtml(t('notLinked'))}</span>
+            ${target ? '<button data-role="unlink" class="text-rose-600 hover:text-rose-800"><i data-lucide="unlink" class="w-4 h-4"></i></button>' : ''}
+            ${(node.type === 'dialogue' && node.options.length > 2) ? '<button data-role="remove" class="text-zinc-400 hover:text-zinc-900"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' : ''}
+        `;
+        const labelInput = row.querySelector('[data-role="label"]');
+        if (labelInput) labelInput.oninput = () => { snapshotDebounced(); o.label = labelInput.value; save(); renderCanvas(); };
+        const unlinkBtn = row.querySelector('[data-role="unlink"]');
+        if (unlinkBtn) unlinkBtn.onclick = () => { snapshotNow(); o.targetNodeId = null; save(); relayout(); renderCanvas(); renderEditor(); };
+        const removeBtn = row.querySelector('[data-role="remove"]');
+        if (removeBtn) removeBtn.onclick = () => { snapshotNow(); node.options.splice(idx, 1); save(); relayout(); renderCanvas(); renderEditor(); };
+        row.title = t('dropNodeHint');
+        row.addEventListener('dragover', (e) => { e.preventDefault(); row.classList.add('drop-hover'); });
+        row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            row.classList.remove('drop-hover');
+            const droppedId = e.dataTransfer.getData('text/node-id');
+            if (!droppedId || droppedId === node.id) return;
+            snapshotNow();
+            o.targetNodeId = droppedId;
+            save(); relayout(); renderCanvas(); renderEditor();
+        });
+        optWrap.appendChild(row);
+
+        const details = document.createElement('details');
+        details.className = 'mt-1';
+        if (o.rewards.length > 0) details.open = true;
+        const rewardsContainerId = 'optRewards-' + o.id;
+        const addRewardBtnId = 'addOptReward-' + o.id;
+        details.innerHTML = `
+            <summary class="text-[10px] font-mono text-zinc-500 cursor-pointer select-none">🎁 ${escapeHtml(t('rewardsLabel'))} (${o.rewards.length})</summary>
+            <div id="${rewardsContainerId}" class="space-y-1 mt-1"></div>
+            <button id="${addRewardBtnId}" class="w-full py-1 border-2 border-dashed border-zinc-300 text-zinc-400 font-mono text-[10px] hover:border-zinc-900 hover:text-zinc-900 transition-colors mt-1">${escapeHtml(t('addRewardBtn'))}</button>
+        `;
+        optWrap.appendChild(details);
+        optionsList.appendChild(optWrap);
+        renderRewardsInto(rewardsContainerId, addRewardBtnId, o.rewards);
+    });
+    lucide.createIcons();
+
+    document.getElementById('btnDeleteNode').onclick = () => deleteNode(node.id);
+    document.getElementById('btnDuplicateNode').onclick = () => duplicateNode(node.id);
+    document.getElementById('btnAddOption').onclick = () => {
+        if (node.options.length >= 3) return;
+        snapshotNow();
+        node.options.push({ id: uid('opt'), label: t('defaultChoice'), targetNodeId: null, rewards: [] });
+        save(); relayout(); renderCanvas(); renderEditor();
+    };
+}
+
+function nodeSummary(n) {
+    if (n.type === 'start') return t('typeStart');
+    if (n.type === 'ending') return t('typeEnding') + ': ' + n.text.slice(0, 20);
+    return (n.characterId && charById(n.characterId) ? charById(n.characterId).name + ': ' : '') + n.text.slice(0, 20);
+}
+
+function deleteNode(id) {
+    snapshotNow();
+    state.nodes = state.nodes.filter(n => n.id !== id);
+    state.nodes.forEach(n => n.options.forEach(o => { if (o.targetNodeId === id) o.targetNodeId = null; }));
+    if (selectedNodeId === id) selectedNodeId = null;
+    save(); relayout(); renderCanvas(); renderEditor();
+}
+
+function duplicateNode(id) {
+    const node = state.nodes.find(n => n.id === id);
+    if (!node) return;
+    snapshotNow();
+    const clone = {
+        id: uid('node'), type: node.type, characterId: node.characterId, text: node.text,
+        options: node.options.map(o => ({ id: uid('opt'), label: o.label, targetNodeId: null }))
+    };
+    state.nodes.push(clone);
+    save(); relayout(); renderCanvas(); selectNode(clone.id);
+}
+
+// ---------- connecting handles (drag arrow) ----------
+function onHandleMouseDown(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const nodeId = e.target.dataset.nodeId;
+    const optionId = e.target.dataset.optionId;
+    connecting = { nodeId, optionId };
+    document.addEventListener('mousemove', onConnectMouseMove);
+    document.addEventListener('mouseup', onConnectMouseUp);
+}
+function onConnectMouseMove(e) {
+    // visual feedback: highlight potential targets
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    document.querySelectorAll('.node-card').forEach(c => c.classList.remove('ring-4', 'ring-blue-500'));
+    const card = el && el.closest ? el.closest('.node-card') : null;
+    if (card && card.dataset.nodeId !== connecting.nodeId) card.classList.add('ring-4', 'ring-blue-500');
+}
+function onConnectMouseUp(e) {
+    document.removeEventListener('mousemove', onConnectMouseMove);
+    document.removeEventListener('mouseup', onConnectMouseUp);
+    document.querySelectorAll('.node-card').forEach(c => c.classList.remove('ring-4', 'ring-blue-500'));
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const card = el && el.closest ? el.closest('.node-card') : null;
+    if (card && connecting) {
+        const targetId = card.dataset.nodeId;
+        if (targetId !== connecting.nodeId) {
+            const node = state.nodes.find(n => n.id === connecting.nodeId);
+            const opt = node.options.find(o => o.id === connecting.optionId);
+            if (opt) { snapshotNow(); opt.targetNodeId = targetId; save(); relayout(); renderCanvas(); renderEditor(); }
+        }
+    }
+    connecting = null;
+}
+
+// ---------- canvas pan & zoom ----------
+const canvasWrapper = document.getElementById('canvasWrapper');
+let panning = false, panStart = null;
+canvasWrapper.addEventListener('mousedown', (e) => {
+    if (e.target !== canvasWrapper && e.target.id !== 'viewport' && e.target.id !== 'edgesSvg' && e.target.id !== 'nodesLayer') return;
+    panning = true;
+    panStart = { x: e.clientX, y: e.clientY, panX, panY };
+});
+document.addEventListener('mousemove', (e) => {
+    if (!panning) return;
+    panX = panStart.panX + (e.clientX - panStart.x);
+    panY = panStart.panY + (e.clientY - panStart.y);
+    applyViewportTransform();
+});
+document.addEventListener('mouseup', () => { panning = false; });
+canvasWrapper.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    zoom = Math.min(2, Math.max(0.3, zoom + delta));
+    applyViewportTransform();
+}, { passive: false });
+
+document.getElementById('btnZoomIn').onclick = () => { zoom = Math.min(2, zoom + 0.15); applyViewportTransform(); };
+document.getElementById('btnZoomOut').onclick = () => { zoom = Math.max(0.3, zoom - 0.15); applyViewportTransform(); };
+document.getElementById('btnZoomReset').onclick = () => { zoom = 1; panX = 60; panY = 40; applyViewportTransform(); };
+
+// click empty canvas deselects
+canvasWrapper.addEventListener('click', (e) => {
+    if (e.target === canvasWrapper || e.target.id === 'viewport' || e.target.id === 'nodesLayer') {
+        selectedNodeId = null; renderCanvas(); renderEditor();
+    }
+});
+
+// ---------- drag character -> create node ----------
+canvasWrapper.addEventListener('dragover', (e) => e.preventDefault());
+canvasWrapper.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const characterId = e.dataTransfer.getData('text/character-id');
+    if (!characterId) return;
+    snapshotNow();
+    const node = makeNode('dialogue', characterId);
+    state.nodes.push(node);
+    save(); relayout(); renderCanvas();
+    selectNode(node.id);
+});
+
+// ---------- toolbar actions ----------
+document.getElementById('btnAddStart').onclick = () => {
+    snapshotNow();
+    const node = makeNode('start');
+    state.nodes.push(node); save(); relayout(); renderCanvas(); selectNode(node.id);
+};
+document.getElementById('btnAddEnding').onclick = () => {
+    snapshotNow();
+    const node = makeNode('ending');
+    state.nodes.push(node); save(); relayout(); renderCanvas(); selectNode(node.id);
+};
+
+function buildPayload() {
+    return {
+        version: 1,
+        characters: state.characters.map(c => ({ id: c.id, name: c.name, seed: c.seed || '', avatar: avatarFor(c), personality: c.personality || '' })),
+        nodes: state.nodes.map(n => ({
+            id: n.id, type: n.type, characterId: n.characterId, text: n.text,
+            rewards: (n.rewards || []).map(r => ({ type: r.type, name: r.name, amount: r.amount })),
+            options: n.options.map(o => ({
+                id: o.id, label: o.label, targetNodeId: o.targetNodeId,
+                rewards: (o.rewards || []).map(r => ({ type: r.type, name: r.name, amount: r.amount }))
+            }))
+        }))
+    };
+}
+
+document.getElementById('btnExport').onclick = () => {
+    const blob = new Blob([JSON.stringify(buildPayload(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'dialogue-tree.json';
+    a.click();
+};
+
+document.getElementById('btnImport').onclick = () => document.getElementById('fileImport').click();
+document.getElementById('fileImport').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(reader.result);
+            snapshotNow();
+            state = { characters: data.characters || [], nodes: data.nodes || [] };
+            ensureRewardsShape();
+            selectedNodeId = null;
+            save(); relayout(); renderCharacterList(); renderCanvas(); renderEditor();
+        } catch (err) { alert(t('invalidJson') + err.message); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+});
+
+// ---------- character modal ----------
+function openCharacterModal(id) {
+    editingCharacterId = id || null;
+    const c = id ? charById(id) : { name: '', seed: '', personality: '' };
+    document.getElementById('charName').value = c.name;
+    document.getElementById('charSeed').value = c.seed || '';
+    document.getElementById('charPersonality').value = c.personality || '';
+    document.getElementById('btnDeleteCharacter').classList.toggle('hidden', !id);
+    document.getElementById('characterModal').classList.remove('hidden');
+    renderAvatarGallery(generateRandomSeeds(AVATAR_GALLERY_SIZE));
+    updateSeedPreview();
+}
+function closeCharacterModal() { document.getElementById('characterModal').classList.add('hidden'); editingCharacterId = null; }
+
+document.getElementById('btnAddCharacter').onclick = () => openCharacterModal(null);
+document.getElementById('btnCancelCharacter').onclick = closeCharacterModal;
+document.getElementById('btnAvatarRandom').onclick = () => renderAvatarGallery(generateRandomSeeds(AVATAR_GALLERY_SIZE));
+document.getElementById('charSeed').addEventListener('input', updateSeedPreview);
+document.getElementById('btnSaveCharacter').onclick = () => {
+    const name = document.getElementById('charName').value.trim();
+    if (!name) { alert(t('needCharacterName')); return; }
+    const seed = document.getElementById('charSeed').value.trim();
+    const personality = document.getElementById('charPersonality').value.trim();
+    snapshotNow();
+    if (editingCharacterId) {
+        const c = charById(editingCharacterId);
+        c.name = name; c.seed = seed; c.personality = personality;
+    } else {
+        state.characters.push({ id: uid('char'), name, seed, personality });
+    }
+    save(); renderCharacterList(); renderCanvas(); renderEditor(); closeCharacterModal();
+};
+document.getElementById('btnDeleteCharacter').onclick = () => {
+    if (!editingCharacterId) return;
+    if (!confirm(t('confirmDeleteCharacter'))) return;
+    snapshotNow();
+    state.characters = state.characters.filter(c => c.id !== editingCharacterId);
+    state.nodes.forEach(n => { if (n.characterId === editingCharacterId) n.characterId = null; });
+    save(); renderCharacterList(); renderCanvas(); renderEditor(); closeCharacterModal();
+};
+
+// ---------- utils ----------
+function escapeHtml(str) { return String(str ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeAttr(str) { return escapeHtml(str); }
+
+// ---------- init ----------
+function seedIfEmpty() {
+    if (state.characters.length || state.nodes.length) return;
+    const felix = { id: uid('char'), name: "Felix 'The Rogue'", avatar: '', personality: 'Mischievous, sly, and always cracks a joke in the face of danger.' };
+    const baron = { id: uid('char'), name: 'Baron von Ink', avatar: '', personality: 'Mysterious, stern, and keeps many secrets.' };
+    state.characters.push(felix, baron);
+    const start = makeNode('start');
+    const q1 = makeNode('dialogue', baron.id);
+    q1.text = 'Do you really think you can cross the Midnight Bridge without a toll?';
+    const yes = makeNode('dialogue', felix.id);
+    yes.text = `Felix smirks. "I've paid tolls much higher than your bridge, old man."`;
+    const no = makeNode('ending');
+    no.text = "The Baron's face turns dark. A sudden wind blows through the rafters.";
+    start.options[0].targetNodeId = q1.id;
+    q1.options[0].targetNodeId = yes.id; // Yes
+    q1.options[1].targetNodeId = no.id;  // No
+    state.nodes.push(start, q1, yes, no);
+}
+
+applyStaticI18n();
+load();
+seedIfEmpty();
+ensureRewardsShape();
+relayout();
+renderCharacterList();
+renderCanvas();
+renderEditor();
+save();
+updateUndoRedoButtons();
+tryReconnectFolder();
+
+if (REVIEW_MODE) {
+    fitToScreen();
+    window.addEventListener('resize', fitToScreen);
+}
+</script>
+</body>
+</html>
