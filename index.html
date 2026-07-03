@@ -1420,7 +1420,7 @@ function openCharacterModal(id) {
     document.getElementById('characterModal').classList.remove('hidden');
     renderAvatarGallery(generateRandomSeeds(AVATAR_GALLERY_SIZE));
     updateSeedPreview();
-}
+} 
 function closeCharacterModal() { document.getElementById('characterModal').classList.add('hidden'); editingCharacterId = null; }
 
 document.getElementById('btnAddCharacter').onclick = () => openCharacterModal(null);
